@@ -1,59 +1,65 @@
-const http = require('http');
-const url = require('url');
-const prom = require('prom-client');
+const fsPromises = require('fs').promises;
 
-const register = new prom.Registry();
-register.setDefaultLabels({ serviceName: 'app' });
-prom.collectDefaultMetrics({ register })
+const express = require('express');
 
-const httpRequestDuration = new prom.Histogram({
-  name: 'http_request_duration_seconds',
-  help: 'Duration of requests in seconds',
-  labelNames: ['method', 'route', 'code'],
-  buckets: [0.1, 0.3, 0.5, 0.7, 1, 3, 5, 7, 10] 
-})
+// Collecting the default metrics recommended by Prometheus
+// https://prometheus.io/docs/instrumenting/writing_clientlibs/#standard-and-runtime-collectors
+const client = require('prom-client');
 
-register.registerMetric(httpRequestDuration)
+// This helps/allows the client to extract extra information
+// from the server. (memory usage, cpu, etc)
+const collectDefaultMetrics = client.collectDefaultMetrics;
 
-const collect = async (req, res) => {
-  // return an error 1% of the time
-  if ((Math.floor(Math.random() * 100)) === 0) {
-    throw new Error('Error');
-  }
+// Probe for every Nth second.
+collectDefaultMetrics({ timeout: 1000 });
 
-  // delay for 3-6 seconds
-  const delaySeconds = Math.floor(Math.random() * (6 - 3)) + 3;
-  await new Promise(res => setTimeout(res, delaySeconds * 1000));
+// [ extra metric ]
+const counter = new client.Counter({
+  name: 'custom_total_number_processed_requests',
+  help: 'Total number of processed requests',
+});
 
-  res.end('ok');
-}
+// [ extra metric ]
+const histogram = new client.Histogram({
+  name: 'custom_request_duration_seconds',
+  help: 'Duration in seconds',
+  buckets: [1, 2, 5, 7, 10],
+});
 
-const server = http.createServer(async (req, res) => {
-  const end = httpRequestDuration.startTimer();
-  const route = url.parse(req.url).pathname;
+const app = express();
 
-  try {
-    if (route === '/metrics') {
-      res.setHeader('Content-Type', register.contentType);
-      res.end(register.metrics());
-    }
+let fileSuffix = 0;
 
-    if (route === '/collect') {
-      await collect(req, res);
-    }
+app.get('/', (_, res) => {
+  counter.inc();
+  res.send('bar');
+});
 
-  } catch (error) {
-    res.writeHead(500).end();
-  }
+app.get('/extra', (_, res) => {
 
-  if (!res.finished) {
-    res.writeHead(404).end();
-  }
+  const start = new Date();
+  const time = 1000;
 
-  end({ route, code: res.statusCode, method: req.method });
-})
+  setTimeout(() => {
+    const end = new Date() - start;
+    histogram.observe(end / 1000);
+  }, time);
 
-server.listen(8080, () => {
-  console.log('Running on http://localhost:8080');
-})
+  counter.inc();
 
+  res.send('extra bar');
+});
+
+app.get('/metrics', async (_, res) => {
+  res.set('Content-Type', client.register.contentType);
+  const metrics = await client.register.metrics();
+  fileSuffix++;
+
+  (async () => {
+    await fsPromises.writeFile(`metrics${fileSuffix}.txt`, metrics);
+  })();
+
+  res.end(metrics);
+});
+
+app.listen(8080, () => console.log(`listening on port 8080`));
