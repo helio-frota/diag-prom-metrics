@@ -5,7 +5,7 @@ delta --side-by-side app/metrics_basic_sync_2.txt app/metrics_basic_sync_3.txt
 ```
 
 ```
-1  │# HELP process_cpu_user_seconds_total Total user CPU time spent in seco→│ 1  │# HELP process_cpu_user_seconds_total Total user CPU time spent in seco→
+| 1  │# HELP process_cpu_user_seconds_total Total user CPU time spent in seco→│ 1  │# HELP process_cpu_user_seconds_total Total user CPU time spent in seco→
 │ 2  │# TYPE process_cpu_user_seconds_total counter                           │ 2  │# TYPE process_cpu_user_seconds_total counter
 │ 3  │process_cpu_user_seconds_total 1.046727                                 │ 3  │process_cpu_user_seconds_total 7.488392
 │ 4  │                                                                        │ 4  │
