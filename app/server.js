@@ -1,5 +1,7 @@
 const fsPromises = require('fs').promises;
 
+const crypto = require('crypto');
+
 const express = require('express');
 
 // Collecting the default metrics recommended by Prometheus
@@ -13,52 +15,25 @@ const collectDefaultMetrics = client.collectDefaultMetrics;
 // Probe for every Nth second.
 collectDefaultMetrics({ timeout: 1000 });
 
-// [ extra metric ]
-const counter = new client.Counter({
-  name: 'custom_total_number_processed_requests',
-  help: 'Total number of processed requests',
-});
-
-// [ extra metric ]
-const histogram = new client.Histogram({
-  name: 'custom_request_duration_seconds',
-  help: 'Duration in seconds',
-  buckets: [1, 2, 5, 7, 10],
-});
-
 const app = express();
 
-let fileSuffix = 0;
+let suffix = 0;
 
-app.get('/', (_, res) => {
-  counter.inc();
-  res.send('bar');
+app.get('/c_sync', (_, res) => {
+  crypto.pbkdf2Sync('secret', 'salt', 5000, 512, 'sha512');
+  res.send('ok');
 });
 
-app.get('/extra', (_, res) => {
-
-  const start = new Date();
-  const time = 1000;
-
-  setTimeout(() => {
-    const end = new Date() - start;
-    histogram.observe(end / 1000);
-  }, time);
-
-  counter.inc();
-
-  res.send('extra bar');
+app.get('/c_async', (_, res) => {
+  crypto.pbkdf2('secret', 'salt', 5000, 512, 'sha512', _ => {});
+  res.send('ok');
 });
 
-app.get('/metrics', async (_, res) => {
+app.get('/metrics', async (req, res) => {
   res.set('Content-Type', client.register.contentType);
   const metrics = await client.register.metrics();
-  fileSuffix++;
-
-  (async () => {
-    await fsPromises.writeFile(`metrics${fileSuffix}.txt`, metrics);
-  })();
-
+  suffix++;
+  await fsPromises.writeFile(`metrics_${req.query.test}_${suffix}.txt`, metrics);
   res.end(metrics);
 });
 
